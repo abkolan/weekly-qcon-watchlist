@@ -1,0 +1,84 @@
+name: Weekly QCon Watchlist
+
+on:
+  schedule:
+    - cron: "0 4 * * MON"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print planned issues without writing to GitHub
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      recent_days:
+        description: Recent publication window
+        required: true
+        default: "14"
+      limit:
+        description: Maximum GitHub issues to create
+        required: true
+        default: "25"
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.QCON_WATCHLIST_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Crawl and score
+        run: |
+          uv run infoq-watchlist migrate
+          uv run infoq-watchlist crawl --max-pages 1 --enrich-details
+          uv run infoq-watchlist score
+          uv run infoq-watchlist weekly \
+            --days "${{ inputs.recent_days || '14' }}" \
+            --top "${{ inputs.limit || '25' }}" \
+            --output data/weekly.md
+
+      - name: Sync to GitHub dry-run
+        if: github.event_name != 'schedule' && inputs.dry_run == 'true'
+        run: |
+          uv run infoq-watchlist github-sync \
+            --recent-days "${{ inputs.recent_days || '14' }}" \
+            --limit "${{ inputs.limit || '25' }}" \
+            --dry-run
+
+      - name: Sync to GitHub
+        if: github.event_name == 'schedule' || inputs.dry_run == 'false'
+        run: |
+          uv run infoq-watchlist github-sync \
+            --recent-days "${{ inputs.recent_days || '14' }}" \
+            --limit "${{ inputs.limit || '25' }}" \
+            --create-issues \
+            --add-to-project
+
+      - name: Commit database state
+        if: github.event_name == 'schedule' || inputs.dry_run == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/infoq.db
+          git diff --cached --quiet || git commit -m "Update weekly QCon watchlist state"
+          git push
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-qcon-watchlist
+          path: |
+            data/weekly.md
+            data/infoq.db

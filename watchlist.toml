@@ -1,0 +1,196 @@
+[backfill]
+default_start_year = 2016
+earliest_start_year = 2007
+
+[thresholds]
+watch = 16
+skim = 10
+transcript = 6
+background = 3
+
+[metadata_weights]
+qcon_source = 6
+relevant_track = 4
+has_transcript = 3
+has_video = 2
+has_slides = 1
+practical_duration = 1
+company_fit = 3
+recent_weekly = 2
+
+[popularity]
+enabled = true
+like_step = 10
+view_step = 1000
+max_bonus = 4
+
+[sources]
+qcon_seed_urls = [
+  "https://www.infoq.com/qcon-london-2016/",
+  "https://www.infoq.com/qcon-newyork-2016/",
+  "https://www.infoq.com/conferences/qconsf2016/",
+]
+
+[github]
+repo = "abkolan/weekly-qcon-watchlist"
+project_owner = "abkolan"
+project_title = "QCon Watch Backlog"
+project_number = 1
+eligible_decisions = ["watch", "skim", "transcript"]
+batch_limit = 25
+sleep_seconds = 1
+default_status = "Backlog"
+
+[companies]
+preferred = [
+  "Netflix",
+  "Google",
+  "Microsoft",
+  "Meta",
+  "Uber",
+  "Stripe",
+  "Shopify",
+  "Cloudflare",
+  "LinkedIn",
+  "Airbnb",
+  "Datadog",
+  "Temporal",
+  "OpenAI",
+  "Anthropic",
+  "Coinbase",
+]
+
+[[signals]]
+name = "qcon"
+weight = 6
+tags = ["qcon"]
+terms = ["QCon", "QCon London", "QCon SF", "QCon Plus", "QCon New York", "QCon San Francisco"]
+
+[[signals]]
+name = "production_case_study"
+weight = 5
+tags = ["production"]
+terms = [
+  "migration",
+  "postmortem",
+  "incident",
+  "outage",
+  "scale",
+  "latency",
+  "reliability",
+  "load shedding",
+  "consistency",
+  "rollback",
+  "multi-region",
+  "control plane",
+]
+
+[[signals]]
+name = "infra_platform"
+weight = 4
+tags = ["infra", "platform"]
+terms = [
+  "distributed systems",
+  "Kubernetes",
+  "service mesh",
+  "platform engineering",
+  "observability",
+  "SRE",
+  "DevOps",
+  "database",
+  "storage",
+  "streaming",
+  "Kafka",
+  "tracing",
+  "workflows",
+  "Temporal",
+]
+
+[[signals]]
+name = "data_infrastructure"
+weight = 4
+tags = ["data"]
+terms = [
+  "data platform",
+  "data pipeline",
+  "data engineering",
+  "data lake",
+  "data warehouse",
+  "lakehouse",
+  "ETL",
+  "ELT",
+  "CDC",
+  "event-driven",
+  "Flink",
+  "Spark",
+  "Iceberg",
+  "Delta Lake",
+  "Kafka Streams",
+  "stream processing",
+]
+
+[[signals]]
+name = "ai_ml_infrastructure"
+weight = 4
+tags = ["ai-infra", "mlops"]
+terms = [
+  "AI infrastructure",
+  "ML infrastructure",
+  "MLOps",
+  "LLMOps",
+  "model serving",
+  "inference",
+  "feature store",
+  "vector database",
+  "embeddings",
+  "RAG",
+  "evals",
+  "agents",
+  "GPU",
+  "accelerator",
+  "training pipeline",
+  "model monitoring",
+  "data governance",
+]
+
+[[signals]]
+name = "measurement"
+weight = 2
+tags = ["measurement"]
+terms = ["p99", "throughput", "requests per second", "error budget", "SLO", "SLA", "availability", "cost", "deployment frequency", "build time"]
+
+[[signals]]
+name = "failure_modes"
+weight = 3
+tags = ["failure"]
+terms = ["failed", "broke", "bottleneck", "retry storm", "overload", "regression", "what we got wrong", "lessons learned"]
+
+[[signals]]
+name = "leadership"
+weight = 2
+tags = ["leadership"]
+terms = ["engineering strategy", "developer productivity", "platform adoption", "org design", "operating model", "socio-technical"]
+
+[[signals]]
+name = "vendor_hype"
+weight = -6
+tags = ["hype"]
+terms = ["unlock", "unleash", "transform", "revolutionize", "future of", "next generation", "AI-native", "10x"]
+
+[[signals]]
+name = "beginner"
+weight = -5
+tags = ["beginner"]
+terms = ["introduction to", "getting started", "basics", "101"]
+
+[[signals]]
+name = "generic_process"
+weight = -3
+tags = ["process"]
+terms = ["scrum", "standup", "agile transformation", "SAFe"]
+
+[[signals]]
+name = "sponsored_demo"
+weight = -5
+tags = ["demo"]
+terms = ["demo", "sponsored", "product walkthrough"]

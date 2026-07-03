@@ -1,0 +1,94 @@
+name: Historical QCon Seed
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: Start year to crawl and sync
+        required: true
+        default: "2016"
+      end_year:
+        description: End year to crawl and sync
+        required: true
+        default: "2016"
+      limit:
+        description: Maximum GitHub issues to create
+        required: true
+        default: "25"
+      dry_run:
+        description: Print planned issues without writing to GitHub
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.QCON_WATCHLIST_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Crawl and score
+        run: |
+          uv run infoq-watchlist migrate
+          uv run infoq-watchlist crawl \
+            --start-year "${{ inputs.start_year }}" \
+            --end-year "${{ inputs.end_year }}" \
+            --max-pages 1 \
+            --enrich-details
+          uv run infoq-watchlist score
+          uv run infoq-watchlist report \
+            --start-year "${{ inputs.start_year }}" \
+            --end-year "${{ inputs.end_year }}" \
+            --output "data/watchlist-${{ inputs.start_year }}-${{ inputs.end_year }}.md"
+
+      - name: Sync to GitHub dry-run
+        if: inputs.dry_run == 'true'
+        run: |
+          for year in $(seq "${{ inputs.start_year }}" "${{ inputs.end_year }}"); do
+            uv run infoq-watchlist github-sync \
+              --year "$year" \
+              --limit "${{ inputs.limit }}" \
+              --dry-run
+          done
+
+      - name: Sync to GitHub
+        if: inputs.dry_run == 'false'
+        run: |
+          for year in $(seq "${{ inputs.start_year }}" "${{ inputs.end_year }}"); do
+            uv run infoq-watchlist github-sync \
+              --year "$year" \
+              --limit "${{ inputs.limit }}" \
+              --create-issues \
+              --add-to-project
+          done
+
+      - name: Commit database state
+        if: inputs.dry_run == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/infoq.db
+          git diff --cached --quiet || git commit -m "Update QCon watchlist sync state"
+          git push
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-qcon-watchlist
+          path: |
+            data/watchlist-*.md
+            data/infoq.db
