@@ -439,15 +439,19 @@ Avoid backfilling many years in one write run. Smaller batches reduce GitHub rat
 
 `.github/workflows/scheduled-backfill.yml` runs every 90 minutes and processes one small GitHub batch per run.
 
-The scheduled job walks from the newest configured year toward older material, defaulting to `2025` down to `2016`. Each run:
+The scheduled job walks from the newest configured year toward older material, defaulting to `2025` down to `2016`. Each write run:
 
-1. previews the next SQLite-backed batch with `github-backfill --dry-run`
-2. repairs created issues that are missing GitHub Project item ids
-3. creates up to the configured limit of new issues
-4. runs database maintenance and tests
-5. commits and pushes `data/infoq.db`
+1. previews the next historical QCon archive source with `scripts/migrate_historical_qcon.py --dry-run`
+2. migrates one not-yet-attempted archive source into SQLite
+3. previews the next SQLite-backed batch with `github-backfill --dry-run`
+4. repairs created issues that are missing GitHub Project item ids
+5. creates up to the configured limit of new issues
+6. runs database maintenance and tests
+7. commits and pushes `data/infoq.db`
 
 Manual dispatches default to `dry_run=true`. Scheduled runs write by default. If GitHub returns a rate-limit error, the workflow still commits any partial SQLite sync state before reporting the rate-limit failure.
+
+The historical migration script records source-level progress in `historical_crawl_state`, so each scheduled run can continue from the next QCon archive URL instead of recrawling the same source.
 
 ### Weekly Watchlist
 

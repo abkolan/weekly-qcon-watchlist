@@ -43,6 +43,9 @@ def test_scheduled_backfill_runs_every_90_minutes_and_checkpoints_db():
     assert 'cron: "0 0-21/3 * * *"' in workflow
     assert 'cron: "30 1-22/3 * * *"' in workflow
     assert "concurrency:" in workflow
+    assert "scripts/migrate_historical_qcon.py" in workflow
+    assert "Preview next historical crawl source" in workflow
+    assert "Migrate next historical crawl source" in workflow
     assert "github-backfill" in workflow
     assert '--end-year "$END_YEAR"' in workflow
     assert "--create-issues" in workflow
