@@ -34,9 +34,9 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.QCON_WATCHLIST_TOKEN || github.token }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
 
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
 
       - name: Install dependencies
         run: uv sync --extra dev
@@ -89,7 +89,7 @@ jobs:
           git push
 
       - name: Upload reports
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: historical-qcon-watchlist
           path: |
