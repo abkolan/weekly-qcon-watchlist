@@ -189,6 +189,44 @@ def test_list_unreported_talks_filters_decisions_and_sorts_by_score(tmp_path):
     assert [talk.title for talk in unreported] == ["Top Skim", "High Watch", "Low Watch"]
 
 
+def test_upsert_talk_collapses_trailing_slash_url_variants(tmp_path):
+    db_path = tmp_path / "infoq.db"
+
+    # The same presentation reached from two sources, one slug with a trailing
+    # slash and one without, must not create duplicate rows.
+    upsert_talk(
+        db_path,
+        Talk(url="https://www.infoq.com/presentations/incident-dns", title="Incident DNS", topics=[], tags=[]),
+    )
+    upsert_talk(
+        db_path,
+        Talk(url="https://www.infoq.com/presentations/incident-dns/", title="Incident DNS", topics=[], tags=[]),
+    )
+
+    talks = list_talks(db_path)
+
+    assert len(talks) == 1
+    assert talks[0].url == "https://www.infoq.com/presentations/incident-dns/"
+
+
+def test_list_talks_filters_by_conference_year(tmp_path):
+    db_path = tmp_path / "infoq.db"
+    # A QCon 2023 talk whose video was published in 2024, plus a 2019 talk.
+    upsert_talk(
+        db_path,
+        Talk(url="https://www.infoq.com/presentations/qcon23/", title="From QCon 2023", year=2024, conference_year=2023),
+    )
+    upsert_talk(
+        db_path,
+        Talk(url="https://www.infoq.com/presentations/qcon19/", title="From QCon 2019", year=2019, conference_year=2019),
+    )
+
+    talks = list_talks(db_path, conference_year=2023)
+
+    # Conference-year filter finds the edition regardless of publication year.
+    assert [talk.title for talk in talks] == ["From QCon 2023"]
+
+
 def test_upsert_talk_persists_direct_presentation_url(tmp_path):
     db_path = tmp_path / "infoq.db"
 
@@ -282,17 +320,21 @@ def test_list_github_sync_candidates_dedupes_trailing_slash_variants(tmp_path):
         latest_first=True,
     )
 
-    # Backfill should create at most one issue for canonical URL variants.
-    assert [talk.title for talk in candidates] == ["Slashless"]
+    # Trailing-slash variants collapse onto one canonical row at upsert time, so
+    # the backfill only ever sees a single candidate (the last write wins).
+    assert len(list_talks(db_path)) == 1
+    assert [talk.title for talk in candidates] == ["Slashed"]
 
 
 def test_list_github_sync_candidates_skips_variant_when_canonical_issue_exists(tmp_path):
     db_path = tmp_path / "infoq.db"
-    synced_url = "https://www.infoq.com/presentations/platform-reliability"
+    # record_github_issue matches the stored (canonical, trailing-slash) URL, which
+    # is what the backfill passes back from list_github_sync_candidates.
+    synced_url = "https://www.infoq.com/presentations/platform-reliability/"
     upsert_talk(db_path, Talk(url=synced_url, title="Already Synced", year=2026, score=20, decision="watch"))
     upsert_talk(
         db_path,
-        Talk(url="https://www.infoq.com/presentations/platform-reliability/", title="Unsynced Variant", year=2026, score=10, decision="watch"),
+        Talk(url="https://www.infoq.com/presentations/platform-reliability", title="Unsynced Variant", year=2026, score=10, decision="watch"),
     )
     storage.record_github_issue(db_path, synced_url, 44, "https://github.com/x/y/issues/44", "I_44")
 

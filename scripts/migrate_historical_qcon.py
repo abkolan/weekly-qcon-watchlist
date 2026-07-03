@@ -84,12 +84,22 @@ def list_pending_sources(
 
 
 def iter_historical_sources(start_year: int, end_year: int) -> Iterable[HistoricalSource]:
-    """Generate known QCon archive URL patterns newest year first."""
+    """Generate known QCon archive URL patterns newest year first.
+
+    InfoQ changed its conference slugs over time: QCon SF moved from
+    ``conferences/qconsf{year}`` (2016-2019) to ``qcon-san-francisco-{year}``
+    (2020+), and QCon New York from ``qcon-newyork-{year}`` to
+    ``qcon-new-york-{year}`` (2023+). We yield both the legacy and modern slug
+    per conference; the slug that does not exist for a given year returns 404 and
+    is recorded as a failed source once, then skipped on later runs.
+    """
     for year in range(end_year, start_year - 1, -1):
         # QCon SF is late-year, then New York, then London, so this is roughly
         # reverse calendar order within each year.
-        yield HistoricalSource(year, "qcon-sf", f"https://www.infoq.com/conferences/qconsf{year}/")
-        yield HistoricalSource(year, "qcon-newyork", f"https://www.infoq.com/qcon-newyork-{year}/")
+        yield HistoricalSource(year, "qcon-sf", f"https://www.infoq.com/qcon-san-francisco-{year}/")
+        yield HistoricalSource(year, "qcon-sf-legacy", f"https://www.infoq.com/conferences/qconsf{year}/")
+        yield HistoricalSource(year, "qcon-newyork", f"https://www.infoq.com/qcon-new-york-{year}/")
+        yield HistoricalSource(year, "qcon-newyork-legacy", f"https://www.infoq.com/qcon-newyork-{year}/")
         yield HistoricalSource(year, "qcon-london", f"https://www.infoq.com/qcon-london-{year}/")
 
 
@@ -113,7 +123,11 @@ def migrate_source(
                     # Detail fetches improve titles/speakers but should not
                     # discard a row when one detail page is temporarily flaky.
                     talk = _enrich_or_keep(talk)
-                upsert_talk(db_path, score_talk(talk, config))
+                scored = score_talk(talk, config)
+                # Tag the row with the QCon edition it was crawled from so it can
+                # be browsed by conference year, independent of publication year.
+                scored.conference_year = source.year
+                upsert_talk(db_path, scored)
                 row_count += 1
         return MigrationResult(source=source, status="success", row_count=row_count)
     except Exception as exc:

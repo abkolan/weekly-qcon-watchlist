@@ -72,6 +72,7 @@ def _build_parser() -> argparse.ArgumentParser:
     report = subparsers.add_parser("report")
     report.add_argument("--start-year", type=int)
     report.add_argument("--end-year", type=int)
+    report.add_argument("--conference-year", type=int, help="Filter by QCon edition year instead of publication year")
     report.add_argument("--top-per-year", type=int, default=15)
     report.add_argument("--output", default="data/watchlist.md")
     report.set_defaults(func=_cmd_report)
@@ -204,9 +205,14 @@ def _cmd_score(args: argparse.Namespace) -> int:
 def _cmd_report(args: argparse.Namespace) -> int:
     """Render a historical Markdown report from SQLite only."""
     config = load_config(args.config)
-    start_year = args.start_year or config.default_start_year
-    end_year = args.end_year or _max_year(args.db) or start_year
-    talks = list_talks(args.db, start_year=start_year, end_year=end_year)
+    if args.conference_year is not None:
+        # Browse one QCon edition regardless of when its videos were published.
+        start_year = end_year = args.conference_year
+        talks = list_talks(args.db, conference_year=args.conference_year)
+    else:
+        start_year = args.start_year or config.default_start_year
+        end_year = args.end_year or _max_year(args.db) or start_year
+        talks = list_talks(args.db, start_year=start_year, end_year=end_year)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_watchlist(talks, start_year, end_year, args.top_per_year), encoding="utf-8")

@@ -17,6 +17,7 @@ class Talk:
     summary: str | None = None
     published_date: date | None = None
     year: int | None = None
+    conference_year: int | None = None
     speaker: str | None = None
     company: str | None = None
     duration_minutes: int | None = None

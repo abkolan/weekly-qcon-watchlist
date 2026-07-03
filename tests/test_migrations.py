@@ -11,9 +11,9 @@ def test_migrate_db_records_applied_versions(tmp_path):
     second_run = migrate_db(db_path)
 
     # Migration runs should be explicit, recorded, and safe to repeat.
-    assert first_run == ["001", "002", "003", "004", "005"]
+    assert first_run == ["001", "002", "003", "004", "005", "006"]
     assert second_run == []
-    assert current_version(db_path) == "005"
+    assert current_version(db_path) == "006"
 
     with sqlite3.connect(db_path) as conn:
         tables = {
@@ -29,6 +29,7 @@ def test_migrate_db_records_applied_versions(tmp_path):
         ("003", "add_presentation_url"),
         ("004", "add_github_sync_state"),
         ("005", "add_historical_crawl_state"),
+        ("006", "add_conference_year"),
     ]
 
 
@@ -40,7 +41,7 @@ def test_cli_migrate_creates_database(tmp_path):
     # The CLI should be enough to stand up a fresh SQLite database.
     assert exit_code == 0
     assert db_path.exists()
-    assert current_version(db_path) == "005"
+    assert current_version(db_path) == "006"
 
 
 def test_migrate_db_adds_reporting_state_columns(tmp_path):
@@ -55,9 +56,10 @@ def test_migrate_db_adds_reporting_state_columns(tmp_path):
         }
 
     # Reporting state lets issue publishing be idempotent across runs.
-    assert applied == ["001", "002", "003", "004", "005"]
-    assert current_version(db_path) == "005"
+    assert applied == ["001", "002", "003", "004", "005", "006"]
+    assert current_version(db_path) == "006"
     assert {
+        "conference_year",
         "watch_status",
         "last_reported_at",
         "issue_number",

@@ -9,6 +9,7 @@ from typing import Any
 
 from infoq_watchlist.migrations import migrate_db
 from infoq_watchlist.models import Talk
+from infoq_watchlist.parser import _canonical_presentation_url
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,13 +35,15 @@ def upsert_talk(path: str | Path, talk: Talk) -> None:
         conn.execute(
             """
             INSERT INTO talks (
-              url, presentation_url, title, summary, published_date, year, speaker, company,
+              url, presentation_url, title, summary, published_date, year, conference_year,
+              speaker, company,
               duration_minutes, source, conference, track, view_count, like_count,
               topics, has_video, has_slides, has_transcript, score, decision,
               reason, tags, fetched_at, updated_at
             )
             VALUES (
-              :url, :presentation_url, :title, :summary, :published_date, :year, :speaker, :company,
+              :url, :presentation_url, :title, :summary, :published_date, :year, :conference_year,
+              :speaker, :company,
               :duration_minutes, :source, :conference, :track, :view_count,
               :like_count, :topics, :has_video, :has_slides, :has_transcript,
               :score, :decision, :reason, :tags, :fetched_at, :updated_at
@@ -51,6 +54,7 @@ def upsert_talk(path: str | Path, talk: Talk) -> None:
               summary = excluded.summary,
               published_date = excluded.published_date,
               year = excluded.year,
+              conference_year = coalesce(excluded.conference_year, talks.conference_year),
               speaker = excluded.speaker,
               company = excluded.company,
               duration_minutes = excluded.duration_minutes,
@@ -78,8 +82,14 @@ def list_talks(
     start_year: int | None = None,
     end_year: int | None = None,
     decisions: list[str] | None = None,
+    conference_year: int | None = None,
 ) -> list[Talk]:
-    """Load talks from SQLite with optional year and decision filters."""
+    """Load talks from SQLite with optional year and decision filters.
+
+    ``start_year``/``end_year`` filter on publication year; ``conference_year``
+    filters on the QCon edition a talk was crawled from (often 1-2 years before
+    it was published).
+    """
     init_db(path)
     clauses: list[str] = []
     params: list[Any] = []
@@ -90,6 +100,9 @@ def list_talks(
     if end_year is not None:
         clauses.append("year <= ?")
         params.append(end_year)
+    if conference_year is not None:
+        clauses.append("conference_year = ?")
+        params.append(conference_year)
     if decisions:
         clauses.append(f"decision IN ({','.join('?' for _ in decisions)})")
         params.extend(decisions)
@@ -321,12 +334,16 @@ def record_github_project_item(path: str | Path, talk_url: str, project_item_id:
 def _to_row(talk: Talk) -> dict[str, Any]:
     """Convert Python types into SQLite-friendly values."""
     return {
-        "url": talk.url,
-        "presentation_url": talk.presentation_url or talk.url,
+        # Canonicalize at the storage boundary so trailing-slash variants of the
+        # same InfoQ presentation collapse onto one ON CONFLICT(url) key, even for
+        # crawl paths that bypass the parser's canonicalization.
+        "url": _canonical_presentation_url(talk.url),
+        "presentation_url": _canonical_presentation_url(talk.presentation_url or talk.url),
         "title": talk.title,
         "summary": talk.summary,
         "published_date": talk.published_date.isoformat() if talk.published_date else None,
         "year": talk.year,
+        "conference_year": talk.conference_year,
         "speaker": talk.speaker,
         "company": talk.company,
         "duration_minutes": talk.duration_minutes,
@@ -357,6 +374,7 @@ def _from_row(row: sqlite3.Row) -> Talk:
         summary=row["summary"],
         published_date=_parse_date(row["published_date"]),
         year=row["year"],
+        conference_year=row["conference_year"],
         speaker=row["speaker"],
         company=row["company"],
         duration_minutes=row["duration_minutes"],
