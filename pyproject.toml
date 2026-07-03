@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "weekly-qcon-watchlist"
 version = "0.1.0"
-description = "Ranked InfoQ/QCon watchlists from deterministic local scoring."
+description = "Local-first InfoQ/QCon watch backlog automation with deterministic scoring and GitHub sync."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
