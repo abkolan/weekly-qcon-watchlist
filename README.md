@@ -1,31 +1,166 @@
 # weekly-qcon-watchlist
 
-Local-first automation for building a high-signal QCon/InfoQ video watch backlog.
+A curated QCon/InfoQ video backlog for learning from strong engineering talks
+without drowning in conference archives.
 
-The system crawls configured QCon/InfoQ source pages, stores talk metadata in
-SQLite, scores talks with editable deterministic filters, and syncs eligible
-videos into GitHub Issues and a GitHub Project board.
+QCon and InfoQ have years of valuable talks on distributed systems,
+infrastructure, data platforms, reliability, architecture, engineering
+leadership, and newer AI/ML infrastructure work. The problem is not scarcity.
+The problem is deciding what is worth watching next, remembering what has
+already been queued, and keeping the backlog fresh without manually revisiting
+old conference pages.
+
+This repo automates that curation loop.
 
 ```text
-QCon source pages -> SQLite -> scoring/filtering -> GitHub Issues -> GitHub Project
+QCon/InfoQ source pages -> SQLite -> scoring/filtering -> GitHub Issues -> GitHub Project
 ```
 
-The goal is not complete QCon archival coverage. The goal is a useful backlog of
-presentations worth watching: distributed systems, infrastructure, data
-platforms, data pipelines, MLOps/AI infrastructure, observability, reliability,
-and production engineering case studies.
+The objective is not complete archival coverage. The objective is a practical
+watch backlog: talks with enough signal to watch, skim, or read via transcript.
+
+## What It Optimizes For
+
+The scoring is intentionally biased toward engineering talks with durable value:
+
+- production case studies
+- distributed systems and reliability
+- platform engineering, SRE, DevOps, observability
+- databases, storage, streaming, and data infrastructure
+- data engineering, pipelines, lakehouse/warehouse topics
+- AI infrastructure, MLOps, LLMOps, model serving, evals, and data governance
+- architecture and engineering leadership talks with concrete operating lessons
+
+It intentionally de-emphasizes:
+
+- generic beginner introductions
+- vendor-heavy product demos
+- vague transformation/process talks
+- hype-heavy titles without operational substance
+
+The filters are editable in `watchlist.toml`, so the taste of the backlog can
+change without touching Python code.
 
 ## Current State
 
-This repo has a working Python CLI, SQLite migrations, GitHub issue/project sync,
-GitHub Actions workflows, and tests.
+This is a working local-first automation system:
 
-The first real sync has already created one issue and Project item:
+- Python CLI
+- SQLite migrations
+- deterministic scoring
+- QCon/InfoQ crawling and parsing
+- GitHub Issue sync
+- GitHub Project sync
+- CI workflow
+- manual historical backfill workflow
+- weekly scheduled workflow
+
+SQLite is the source of truth. GitHub Issues and the GitHub Project are the
+reading and tracking surfaces generated from that state.
+
+The first real sync created:
 
 - [#1 ETL Is Dead, Long Live Streams](https://github.com/abkolan/weekly-qcon-watchlist/issues/1)
 
-SQLite is the source of truth. GitHub Issues and the Project board are generated
-views over the SQLite state.
+## Dashboard
+
+The GitHub Project is the watch board:
+
+```text
+QCon Watch Backlog
+```
+
+Status columns:
+
+- `Backlog`: synced from the CLI, not yet selected
+- `Queued`: actively planned for near-term watching
+- `Watching`: currently in progress
+- `Watched`: completed
+- `Skipped`: intentionally not watching
+- `Rewatch`: worth revisiting later
+
+Project fields populated by the CLI:
+
+- `Year`
+- `Decision`
+- `Score`
+- `Speaker`
+- `Conference`
+- `Presentation URL`
+
+New synced issues land in `Backlog`.
+
+## Public vs Private Project
+
+Making the Project public is useful if you want the dashboard to be a visible
+learning roadmap. It lets other people see the queue, the topics being
+prioritized, and which talks made the cut.
+
+Keeping it private is better while the system is still being backfilled and tuned.
+During that phase, the board is more operational than editorial: scores may
+shift, low-quality talks may be discovered and skipped, and the status columns
+may reflect personal watching habits rather than public recommendations.
+
+Recommended path:
+
+1. Keep the Project private while backfilling 2016-2025.
+2. Keep the repository public if you want the automation and scoring approach to
+   be visible.
+3. Make the Project public later, once the backlog feels curated and the status
+   taxonomy is stable.
+
+Public issues already provide a shareable surface. The Project board can become
+public when it feels like a useful dashboard rather than an active work queue.
+
+## Data Strategy
+
+The canonical database is:
+
+```text
+data/infoq.db
+```
+
+It is committed to the repository so GitHub Actions has durable sync state across
+runs. This is what prevents duplicate GitHub issues.
+
+The database stores compact canonical state:
+
+- InfoQ presentation URL
+- title, speaker, company, conference, year, track
+- video/slides/transcript availability
+- score, decision, reason, tags
+- GitHub issue number, issue URL, issue node ID
+- GitHub Project item ID
+- watch status
+
+It should not store large artifacts:
+
+- cached HTML
+- transcripts
+- media files
+- large response bodies
+
+Generated caches, Markdown reports, CSV exports, and scratch DBs are ignored by
+Git. Only `data/infoq.db` is tracked.
+
+## Database Maintenance
+
+The workflows run:
+
+```bash
+uv run infoq-watchlist db-maintenance \
+  --vacuum-threshold-mb 5 \
+  --fail-threshold-mb 25
+```
+
+Behavior:
+
+- reports SQLite size as JSON
+- runs `VACUUM` once the DB is at least 5 MB
+- fails above 25 MB to catch accidental bloat before committing it
+
+The current database is far smaller than 5 MB. The threshold exists to catch
+growth early.
 
 ## Quick Start
 
@@ -63,56 +198,6 @@ uv run infoq-watchlist github-sync \
   --add-to-project
 ```
 
-## Data Model
-
-The canonical database is:
-
-```text
-data/infoq.db
-```
-
-It is intentionally committed to the repository so GitHub Actions has durable
-sync state across workflow runs. This prevents duplicate issue creation.
-
-The database stores:
-
-- InfoQ presentation URL
-- title, speaker, company, conference, year, track
-- video/slides/transcript availability
-- score, decision, reason, tags
-- GitHub issue number, issue URL, issue node ID
-- GitHub Project item ID
-- watch status
-
-The database should not store:
-
-- cached HTML
-- transcripts
-- media files
-- large response bodies
-
-Generated HTML caches, Markdown reports, CSV exports, and scratch DBs are ignored
-by Git. Only `data/infoq.db` is tracked.
-
-## Database Maintenance
-
-The workflows run:
-
-```bash
-uv run infoq-watchlist db-maintenance \
-  --vacuum-threshold-mb 5 \
-  --fail-threshold-mb 25
-```
-
-Behavior:
-
-- reports SQLite size as JSON
-- runs `VACUUM` once the DB is at least 5 MB
-- fails above 25 MB to catch accidental bloat before committing it
-
-Current size is much smaller than that. The 5 MB threshold is there as an early
-maintenance trigger, not because the current dataset needs it.
-
 ## Configuration
 
 Editable scoring and source configuration lives in:
@@ -120,9 +205,6 @@ Editable scoring and source configuration lives in:
 ```text
 watchlist.toml
 ```
-
-Change this file when you want to tune what gets promoted into the backlog.
-GitHub Actions reads it on each run.
 
 Useful sections:
 
@@ -138,8 +220,8 @@ The current eligible GitHub decisions are:
 eligible_decisions = ["watch", "skim", "transcript"]
 ```
 
-Rows scored as `background` or `skip` stay in SQLite but are not synced to
-GitHub unless the config changes later.
+Rows scored as `background` or `skip` stay in SQLite but are not synced to GitHub
+unless the config changes later.
 
 ## CLI Commands
 
@@ -229,57 +311,6 @@ For the current workflow, use a GitHub classic personal access token with:
 
 The built-in `GITHUB_TOKEN` can handle some repo operations, but Project updates
 need the token with Project access.
-
-## GitHub Project
-
-The Project is:
-
-```text
-QCon Watch Backlog
-```
-
-Current Status options:
-
-- `Backlog`
-- `Queued`
-- `Watching`
-- `Watched`
-- `Skipped`
-- `Rewatch`
-
-CLI-managed fields:
-
-- `Year`
-- `Decision`
-- `Score`
-- `Speaker`
-- `Conference`
-- `Presentation URL`
-
-New synced issues land in `Backlog`.
-
-## Public vs Private Project
-
-Making the Project public is reasonable if the board is meant to be a visible
-learning backlog. It lets others see what you plan to watch and which topics you
-are prioritizing.
-
-Keep it private if you want freedom to:
-
-- reorder aggressively without explaining the priority model
-- keep watch status personal
-- add notes later that may be rough, subjective, or incomplete
-- avoid making abandoned/skipped items look like public recommendations
-
-The safe default is:
-
-1. Keep the Project private while backfilling 2016-2025.
-2. Make the repository public if you want the code/workflows visible.
-3. Make the Project public later once the board has enough signal and the status
-   taxonomy feels stable.
-
-Public issues are already a useful sharing surface. The Project board can stay
-private until it becomes a curated product rather than an operational queue.
 
 ## Workflows
 
@@ -381,12 +412,4 @@ Run them before pushing:
 
 ```bash
 uv run --extra dev pytest -q
-```
-
-## Project Spec
-
-Detailed backlog and design notes live in:
-
-```text
-SPEC.md
 ```
