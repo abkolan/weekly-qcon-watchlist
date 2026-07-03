@@ -42,11 +42,11 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.QCON_WATCHLIST_TOKEN || github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.QCON_WATCHLIST_TOKEN || github.token }}
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v8
 
       - name: Resolve run settings
         run: |
@@ -113,7 +113,7 @@ jobs:
 
       - name: Upload database snapshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scheduled-qcon-backfill-state
           path: data/infoq.db
