@@ -76,6 +76,9 @@ jobs:
               --add-to-project
           done
 
+      - name: Maintain database size
+        run: uv run infoq-watchlist db-maintenance --vacuum-threshold-mb 5 --fail-threshold-mb 25
+
       - name: Commit database state
         if: inputs.dry_run == 'false'
         run: |

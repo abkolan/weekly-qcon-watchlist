@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sqlite3
 from dataclasses import asdict
 from pathlib import Path
 
@@ -48,6 +49,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     migrate = subparsers.add_parser("migrate")
     migrate.set_defaults(func=_cmd_migrate)
+
+    db_maintenance = subparsers.add_parser("db-maintenance")
+    db_maintenance.add_argument("--vacuum-threshold-mb", type=float, default=5)
+    db_maintenance.add_argument("--fail-threshold-mb", type=float, default=25)
+    db_maintenance.set_defaults(func=_cmd_db_maintenance)
 
     crawl = subparsers.add_parser("crawl")
     crawl.add_argument("--start-year", type=int)
@@ -104,6 +110,45 @@ def _cmd_migrate(args: argparse.Namespace) -> int:
         print(f"applied migrations: {', '.join(applied)}")
     else:
         print(f"database already at version {version}")
+    return 0
+
+
+def _cmd_db_maintenance(args: argparse.Namespace) -> int:
+    """Report SQLite size and compact it when it crosses the configured limit."""
+    db_path = Path(args.db)
+    if not db_path.exists():
+        print(f"database missing: {db_path}")
+        return 1
+
+    before_bytes = db_path.stat().st_size
+    before_mb = _bytes_to_mb(before_bytes)
+    vacuumed = False
+
+    if before_mb >= args.vacuum_threshold_mb:
+        # VACUUM rewrites the database file, reclaiming free pages after churn.
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("VACUUM")
+        vacuumed = True
+
+    after_bytes = db_path.stat().st_size
+    after_mb = _bytes_to_mb(after_bytes)
+    print(
+        json.dumps(
+            {
+                "path": str(db_path),
+                "before_mb": round(before_mb, 3),
+                "after_mb": round(after_mb, 3),
+                "vacuumed": vacuumed,
+                "vacuum_threshold_mb": args.vacuum_threshold_mb,
+                "fail_threshold_mb": args.fail_threshold_mb,
+            },
+            indent=2,
+        )
+    )
+
+    if after_mb > args.fail_threshold_mb:
+        print(f"database exceeds fail threshold: {after_mb:.3f} MB > {args.fail_threshold_mb:.3f} MB")
+        return 2
     return 0
 
 
@@ -263,6 +308,11 @@ def _max_year(db_path: str) -> int | None:
     """Find the latest stored year without exposing SQL in the CLI command."""
     years = [talk.year for talk in list_talks(db_path) if talk.year is not None]
     return max(years) if years else None
+
+
+def _bytes_to_mb(value: int) -> float:
+    """Convert bytes to MiB-style megabytes for stable CLI thresholds."""
+    return value / (1024 * 1024)
 
 
 if __name__ == "__main__":

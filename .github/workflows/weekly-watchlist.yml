@@ -66,6 +66,9 @@ jobs:
             --create-issues \
             --add-to-project
 
+      - name: Maintain database size
+        run: uv run infoq-watchlist db-maintenance --vacuum-threshold-mb 5 --fail-threshold-mb 25
+
       - name: Commit database state
         if: github.event_name == 'schedule' || inputs.dry_run == 'false'
         run: |

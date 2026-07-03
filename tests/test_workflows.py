@@ -10,6 +10,7 @@ def test_historical_seed_workflow_has_dry_run_and_commit_steps():
     assert "github-sync" in workflow
     assert "--dry-run" in workflow
     assert "--create-issues" in workflow
+    assert "db-maintenance --vacuum-threshold-mb 5 --fail-threshold-mb 25" in workflow
     assert "git add data/infoq.db" in workflow
 
 
@@ -20,5 +21,6 @@ def test_weekly_workflow_schedules_sync_and_uploads_report():
     assert "schedule:" in workflow
     assert "github-sync" in workflow
     assert "--recent-days" in workflow
+    assert "db-maintenance --vacuum-threshold-mb 5 --fail-threshold-mb 25" in workflow
     assert "actions/upload-artifact" in workflow
     assert "git add data/infoq.db" in workflow
