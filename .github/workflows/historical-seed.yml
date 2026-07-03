@@ -10,7 +10,7 @@ on:
       end_year:
         description: End year to crawl and sync
         required: true
-        default: "2016"
+        default: "2030"
       limit:
         description: Maximum GitHub issues to create
         required: true
@@ -58,23 +58,22 @@ jobs:
       - name: Sync to GitHub dry-run
         if: inputs.dry_run == 'true'
         run: |
-          for year in $(seq "${{ inputs.start_year }}" "${{ inputs.end_year }}"); do
-            uv run infoq-watchlist github-sync \
-              --year "$year" \
-              --limit "${{ inputs.limit }}" \
-              --dry-run
-          done
+          uv run infoq-watchlist github-backfill \
+            --start-year "${{ inputs.start_year }}" \
+            --end-year "${{ inputs.end_year }}" \
+            --limit "${{ inputs.limit }}" \
+            --add-to-project \
+            --dry-run
 
       - name: Sync to GitHub
         if: inputs.dry_run == 'false'
         run: |
-          for year in $(seq "${{ inputs.start_year }}" "${{ inputs.end_year }}"); do
-            uv run infoq-watchlist github-sync \
-              --year "$year" \
-              --limit "${{ inputs.limit }}" \
-              --create-issues \
-              --add-to-project
-          done
+          uv run infoq-watchlist github-backfill \
+            --start-year "${{ inputs.start_year }}" \
+            --end-year "${{ inputs.end_year }}" \
+            --limit "${{ inputs.limit }}" \
+            --create-issues \
+            --add-to-project
 
       - name: Maintain database size
         run: uv run infoq-watchlist db-maintenance --vacuum-threshold-mb 5 --fail-threshold-mb 25

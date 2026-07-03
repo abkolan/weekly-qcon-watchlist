@@ -99,8 +99,8 @@ def _build_parser() -> argparse.ArgumentParser:
     github_sync.set_defaults(func=_cmd_github_sync)
 
     github_backfill = subparsers.add_parser("github-backfill")
-    github_backfill.add_argument("--start-year", type=int, default=2016)
-    github_backfill.add_argument("--end-year", type=int, default=2025)
+    github_backfill.add_argument("--start-year", type=int)
+    github_backfill.add_argument("--end-year", type=int)
     github_backfill.add_argument("--limit", type=int)
     github_backfill.add_argument("--sleep-seconds", type=float)
     github_backfill.add_argument("--dry-run", action="store_true")
@@ -278,6 +278,9 @@ def _cmd_github_backfill(args: argparse.Namespace) -> int:
     """Backfill one latest-first historical GitHub batch from SQLite."""
     config = load_config(args.config)
     settings = settings_from_config(config.github)
+    # Resolve the historical window from config so workflow and local defaults stay aligned.
+    start_year = args.start_year or config.default_start_year
+    end_year = args.end_year or config.default_end_year
     limit = args.limit or settings.batch_limit
     sleep_seconds = settings.sleep_seconds if args.sleep_seconds is None else args.sleep_seconds
     decisions = list(settings.eligible_decisions)
@@ -289,8 +292,8 @@ def _cmd_github_backfill(args: argparse.Namespace) -> int:
         repair_candidates = list_github_project_repair_candidates(
             args.db,
             decisions=decisions,
-            start_year=args.start_year,
-            end_year=args.end_year,
+            start_year=start_year,
+            end_year=end_year,
             limit=limit,
             latest_first=True,
         )
@@ -301,8 +304,8 @@ def _cmd_github_backfill(args: argparse.Namespace) -> int:
         talks = list_github_sync_candidates(
             args.db,
             decisions=decisions,
-            start_year=args.start_year,
-            end_year=args.end_year,
+            start_year=start_year,
+            end_year=end_year,
             limit=remaining_limit,
             latest_first=True,
         )
@@ -322,8 +325,8 @@ def _cmd_github_backfill(args: argparse.Namespace) -> int:
             json.dumps(
                 {
                     "mode": "dry-run",
-                    "start_year": args.start_year,
-                    "end_year": args.end_year,
+                    "start_year": start_year,
+                    "end_year": end_year,
                     "count": len(repairs) + len(payloads),
                     "repairs": repairs,
                     "issues": payloads,

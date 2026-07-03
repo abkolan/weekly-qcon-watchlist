@@ -262,6 +262,53 @@ def test_list_github_sync_candidates_can_walk_latest_first(tmp_path):
     assert [talk.title for talk in candidates] == ["New Low", "New High", "Old"]
 
 
+def test_list_github_sync_candidates_dedupes_trailing_slash_variants(tmp_path):
+    db_path = tmp_path / "infoq.db"
+    upsert_talk(
+        db_path,
+        Talk(url="https://www.infoq.com/presentations/platform-reliability", title="Slashless", year=2026, score=20, decision="watch"),
+    )
+    upsert_talk(
+        db_path,
+        Talk(url="https://www.infoq.com/presentations/platform-reliability/", title="Slashed", year=2026, score=10, decision="watch"),
+    )
+
+    candidates = storage.list_github_sync_candidates(
+        db_path,
+        decisions=["watch"],
+        start_year=2016,
+        end_year=2030,
+        limit=10,
+        latest_first=True,
+    )
+
+    # Backfill should create at most one issue for canonical URL variants.
+    assert [talk.title for talk in candidates] == ["Slashless"]
+
+
+def test_list_github_sync_candidates_skips_variant_when_canonical_issue_exists(tmp_path):
+    db_path = tmp_path / "infoq.db"
+    synced_url = "https://www.infoq.com/presentations/platform-reliability"
+    upsert_talk(db_path, Talk(url=synced_url, title="Already Synced", year=2026, score=20, decision="watch"))
+    upsert_talk(
+        db_path,
+        Talk(url="https://www.infoq.com/presentations/platform-reliability/", title="Unsynced Variant", year=2026, score=10, decision="watch"),
+    )
+    storage.record_github_issue(db_path, synced_url, 44, "https://github.com/x/y/issues/44", "I_44")
+
+    candidates = storage.list_github_sync_candidates(
+        db_path,
+        decisions=["watch"],
+        start_year=2016,
+        end_year=2030,
+        limit=10,
+        latest_first=True,
+    )
+
+    # Once any canonical URL variant has an issue, the other variant should not be offered.
+    assert candidates == []
+
+
 def test_list_github_project_repair_candidates_returns_missing_project_items(tmp_path):
     db_path = tmp_path / "infoq.db"
     missing_url = "https://www.infoq.com/presentations/missing-project/"

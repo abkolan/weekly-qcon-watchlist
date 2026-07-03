@@ -14,7 +14,7 @@ on:
       end_year:
         description: Newest year to include
         required: true
-        default: "2025"
+        default: "2030"
       limit:
         description: Maximum Project repairs plus new issues per run
         required: true
@@ -51,7 +51,7 @@ jobs:
       - name: Resolve run settings
         run: |
           echo "START_YEAR=${{ inputs.start_year || '2016' }}" >> "$GITHUB_ENV"
-          echo "END_YEAR=${{ inputs.end_year || '2025' }}" >> "$GITHUB_ENV"
+          echo "END_YEAR=${{ inputs.end_year || '2030' }}" >> "$GITHUB_ENV"
           echo "LIMIT=${{ inputs.limit || '10' }}" >> "$GITHUB_ENV"
           if [ "${{ github.event_name }}" = "schedule" ]; then
             echo "DRY_RUN=false" >> "$GITHUB_ENV"
@@ -137,6 +137,6 @@ jobs:
           name: scheduled-qcon-backfill-state
           path: data/infoq.db
 
-      - name: Report rate limit after checkpoint
+      - name: Report handled rate limit after checkpoint
         if: steps.backfill.outputs.status == '2'
-        run: exit 2
+        run: echo "::notice::GitHub rate limit reached after checkpointing database state; the next scheduled run will resume."

@@ -23,6 +23,7 @@ class WatchlistConfig:
     """Runtime scoring/backfill config with safe defaults."""
 
     default_start_year: int = 2016
+    default_end_year: int = 2030
     earliest_start_year: int = 2007
     thresholds: dict[str, float] = field(default_factory=lambda: {
         "watch": 16,
@@ -87,6 +88,8 @@ def load_config(path: str | Path | None = None) -> WatchlistConfig:
     defaults = WatchlistConfig()
     return WatchlistConfig(
         default_start_year=int(backfill.get("default_start_year", defaults.default_start_year)),
+        # Keep future-dated backfill windows explicit and config-driven.
+        default_end_year=int(backfill.get("default_end_year", defaults.default_end_year)),
         earliest_start_year=int(backfill.get("earliest_start_year", defaults.earliest_start_year)),
         thresholds={**defaults.thresholds, **raw.get("thresholds", {})},
         metadata_weights={**defaults.metadata_weights, **raw.get("metadata_weights", {})},

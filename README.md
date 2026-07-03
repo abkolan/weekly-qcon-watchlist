@@ -195,7 +195,7 @@ Create a historical Markdown watchlist:
 ```bash
 uv run infoq-watchlist report \
   --start-year 2016 \
-  --end-year 2026 \
+  --end-year 2030 \
   --top-per-year 15
 ```
 
@@ -315,7 +315,7 @@ To add a new keyword to an existing category:
 2. Find the relevant `[[signals]]` block.
 3. Add the phrase to that block's `terms` list.
 4. Run `uv run infoq-watchlist score` to rescore existing rows.
-5. Run `uv run infoq-watchlist report --start-year 2016 --end-year 2026` to inspect the result.
+5. Run `uv run infoq-watchlist report --start-year 2016 --end-year 2030` to inspect the result.
 6. Run `uv run infoq-watchlist github-sync --year 2016 --limit 25 --dry-run` before creating any GitHub issues.
 
 Example, to make `control plane` count as infrastructure:
@@ -364,7 +364,7 @@ After keyword changes, the safe validation loop is:
 
 ```bash
 uv run infoq-watchlist score
-uv run infoq-watchlist report --start-year 2016 --end-year 2026
+uv run infoq-watchlist report --start-year 2016 --end-year 2030
 uv run infoq-watchlist github-sync --year 2016 --limit 25 --dry-run
 ```
 
@@ -428,18 +428,18 @@ The built-in `GITHUB_TOKEN` can handle some repository operations, but Project u
 
 Recommended backfill flow:
 
-1. Run one year with `dry_run=true`.
-2. Run the same year with `dry_run=false` and a small `limit`, such as `10` or `25`.
+1. Run the full 2016-2030 window with `dry_run=true`.
+2. Run the same window with `dry_run=false` and a small `limit`, such as `10` or `25`.
 3. Repeat until dry-run returns no eligible rows.
-4. Move to the next year.
+4. Use the scheduled workflow if GitHub starts returning rate-limit errors.
 
-Avoid backfilling many years in one write run. Smaller batches reduce GitHub rate-limit risk and give the SQLite sync state a chance to commit between runs.
+The 2030 upper bound is intentionally future-safe: years without crawled talks do not create issues. Smaller batches reduce GitHub rate-limit risk and give the SQLite sync state a chance to commit between runs.
 
 ### Scheduled Backfill
 
 `.github/workflows/scheduled-backfill.yml` runs every 90 minutes and processes one small GitHub batch per run.
 
-The scheduled job walks from the newest configured year toward older material, defaulting to `2025` down to `2016`. Each write run:
+The scheduled job walks from the newest configured year toward older material, defaulting to `2030` down to `2016`. Each run:
 
 1. previews the next historical QCon archive source with `scripts/migrate_historical_qcon.py --dry-run`
 2. migrates one not-yet-attempted archive source into SQLite
@@ -449,7 +449,7 @@ The scheduled job walks from the newest configured year toward older material, d
 6. runs database maintenance and tests
 7. commits and pushes `data/infoq.db`
 
-Manual dispatches default to `dry_run=true`. Scheduled runs write by default. If GitHub returns a rate-limit error, the workflow still commits any partial SQLite sync state before reporting the rate-limit failure.
+Manual dispatches default to `dry_run=true`. Scheduled runs write by default. If GitHub returns a rate-limit error, the workflow still commits any partial SQLite sync state and lets the next scheduled run resume.
 
 The historical migration script records source-level progress in `historical_crawl_state`, so each scheduled run can continue from the next QCon archive URL instead of recrawling the same source.
 

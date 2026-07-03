@@ -271,6 +271,29 @@ def test_cli_github_sync_rate_limit_stops_cleanly(tmp_path, monkeypatch):
     assert synced == 1
 
 
+def test_cli_github_backfill_defaults_to_configured_2030_window(tmp_path, capsys):
+    db_path = tmp_path / "infoq.db"
+    upsert_talk(
+        db_path,
+        Talk(
+            url="https://www.infoq.com/presentations/future-platform/",
+            title="Future Platform Operations",
+            year=2030,
+            score=20,
+            decision="watch",
+        ),
+    )
+
+    exit_code = cli.main(["--db", str(db_path), "github-backfill", "--limit", "1", "--dry-run"])
+
+    # The default window should include future-safe rows through 2030.
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["start_year"] == 2016
+    assert output["end_year"] == 2030
+    assert output["issues"][0]["title"] == "[2030][QCon] Future Platform Operations"
+
+
 def test_cli_github_backfill_repairs_project_items_before_creating_issues(tmp_path, monkeypatch):
     db_path = tmp_path / "infoq.db"
     repair_url = "https://www.infoq.com/presentations/repair/"

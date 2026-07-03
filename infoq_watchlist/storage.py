@@ -141,31 +141,53 @@ def list_github_sync_candidates(
 ) -> list[Talk]:
     """Return eligible talks that do not already have a GitHub issue."""
     init_db(path)
-    clauses = ["github_issue_number IS NULL", "issue_number IS NULL"]
+    clauses = [
+        "t.github_issue_number IS NULL",
+        "t.issue_number IS NULL",
+        # Avoid duplicate GitHub issues when historical rows differ only by URL slash style.
+        """
+        NOT EXISTS (
+          SELECT 1
+          FROM talks synced
+          WHERE rtrim(coalesce(synced.presentation_url, synced.url), '/') = rtrim(coalesce(t.presentation_url, t.url), '/')
+            AND (synced.github_issue_number IS NOT NULL OR synced.issue_number IS NOT NULL)
+        )
+        """,
+    ]
     params: list[Any] = []
 
     if decisions:
-        clauses.append(f"decision IN ({','.join('?' for _ in decisions)})")
+        clauses.append(f"t.decision IN ({','.join('?' for _ in decisions)})")
         params.extend(decisions)
     if year is not None:
-        clauses.append("year = ?")
+        clauses.append("t.year = ?")
         params.append(year)
     if start_year is not None:
-        clauses.append("year >= ?")
+        clauses.append("t.year >= ?")
         params.append(start_year)
     if end_year is not None:
-        clauses.append("year <= ?")
+        clauses.append("t.year <= ?")
         params.append(end_year)
     if recent_days is not None:
-        clauses.append("published_date >= date('now', ?)")
+        clauses.append("t.published_date >= date('now', ?)")
         params.append(f"-{recent_days} days")
 
     # Scheduled historical backfills should walk from newest dated talks toward
     # older material. Manual yearly sync keeps the older score-first ordering.
     order_by = "year DESC, published_date DESC, score DESC, title" if latest_first else "score DESC, year DESC, title"
     sql = f"""
-        SELECT * FROM talks
-        WHERE {' AND '.join(clauses)}
+        WITH candidates AS (
+          SELECT
+            t.*,
+            row_number() OVER (
+              PARTITION BY rtrim(coalesce(t.presentation_url, t.url), '/')
+              ORDER BY t.score DESC, t.title
+            ) AS canonical_rank
+          FROM talks t
+          WHERE {' AND '.join(clauses)}
+        )
+        SELECT * FROM candidates
+        WHERE canonical_rank = 1
         ORDER BY {order_by}
         LIMIT ?
     """
