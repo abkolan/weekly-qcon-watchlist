@@ -1,6 +1,16 @@
 from pathlib import Path
 
 
+def test_ci_workflow_runs_tests_without_github_writes():
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    # CI should validate code changes without crawling or mutating GitHub state.
+    assert "push:" in workflow
+    assert "pull_request:" in workflow
+    assert "uv run pytest -q" in workflow
+    assert "github-sync" not in workflow
+
+
 def test_historical_seed_workflow_has_dry_run_and_commit_steps():
     workflow = Path(".github/workflows/historical-seed.yml").read_text(encoding="utf-8")
 
