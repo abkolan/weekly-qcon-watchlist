@@ -435,6 +435,20 @@ Recommended backfill flow:
 
 Avoid backfilling many years in one write run. Smaller batches reduce GitHub rate-limit risk and give the SQLite sync state a chance to commit between runs.
 
+### Scheduled Backfill
+
+`.github/workflows/scheduled-backfill.yml` runs every 90 minutes and processes one small GitHub batch per run.
+
+The scheduled job walks from the newest configured year toward older material, defaulting to `2025` down to `2016`. Each run:
+
+1. previews the next SQLite-backed batch with `github-backfill --dry-run`
+2. repairs created issues that are missing GitHub Project item ids
+3. creates up to the configured limit of new issues
+4. runs database maintenance and tests
+5. commits and pushes `data/infoq.db`
+
+Manual dispatches default to `dry_run=true`. Scheduled runs write by default. If GitHub returns a rate-limit error, the workflow still commits any partial SQLite sync state before reporting the rate-limit failure.
+
 ### Weekly Watchlist
 
 `.github/workflows/weekly-watchlist.yml` runs weekly and can also be dispatched manually.

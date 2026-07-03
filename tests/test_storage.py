@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 
 from infoq_watchlist import storage
 from infoq_watchlist.models import Talk
@@ -237,6 +237,55 @@ def test_list_github_sync_candidates_filters_synced_and_limits(tmp_path):
 
     # GitHub sync should exclude low-priority and already-created issue rows.
     assert [talk.title for talk in candidates] == ["B"]
+
+
+def test_list_github_sync_candidates_can_walk_latest_first(tmp_path):
+    db_path = tmp_path / "infoq.db"
+    talks = [
+        Talk(url="https://www.infoq.com/presentations/old/", title="Old", year=2024, published_date=date(2024, 12, 1), score=99, decision="watch"),
+        Talk(url="https://www.infoq.com/presentations/new-low/", title="New Low", year=2025, published_date=date(2025, 12, 1), score=10, decision="watch"),
+        Talk(url="https://www.infoq.com/presentations/new-high/", title="New High", year=2025, published_date=date(2025, 11, 1), score=90, decision="watch"),
+    ]
+    for talk in talks:
+        upsert_talk(db_path, talk)
+
+    candidates = storage.list_github_sync_candidates(
+        db_path,
+        decisions=["watch"],
+        start_year=2024,
+        end_year=2025,
+        limit=3,
+        latest_first=True,
+    )
+
+    # Scheduled backfill should start at the newest month, then move backward.
+    assert [talk.title for talk in candidates] == ["New Low", "New High", "Old"]
+
+
+def test_list_github_project_repair_candidates_returns_missing_project_items(tmp_path):
+    db_path = tmp_path / "infoq.db"
+    missing_url = "https://www.infoq.com/presentations/missing-project/"
+    complete_url = "https://www.infoq.com/presentations/complete-project/"
+    upsert_talk(db_path, Talk(url=missing_url, title="Missing Project", year=2025, decision="watch"))
+    upsert_talk(db_path, Talk(url=complete_url, title="Complete Project", year=2025, decision="watch"))
+    storage.record_github_issue(db_path, missing_url, 35, "https://github.com/x/y/issues/35", "I_35")
+    storage.record_github_issue(db_path, complete_url, 36, "https://github.com/x/y/issues/36", "I_36")
+    storage.record_github_project_item(db_path, complete_url, "PVTI_36")
+
+    candidates = storage.list_github_project_repair_candidates(
+        db_path,
+        decisions=["watch"],
+        start_year=2025,
+        end_year=2025,
+        limit=10,
+        latest_first=True,
+    )
+
+    # Only rows with an issue but no Project item should be repaired.
+    assert len(candidates) == 1
+    assert candidates[0].talk.title == "Missing Project"
+    assert candidates[0].issue_number == 35
+    assert candidates[0].issue_node_id == "I_35"
 
 
 def test_record_github_project_item_persists_item_id(tmp_path):

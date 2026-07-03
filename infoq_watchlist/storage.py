@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from infoq_watchlist.migrations import migrate_db
 from infoq_watchlist.models import Talk
+
+
+@dataclass(frozen=True, slots=True)
+class GitHubProjectRepairCandidate:
+    """Existing issue metadata for rows that still need Project sync."""
+
+    talk: Talk
+    issue_number: int
+    issue_url: str
+    issue_node_id: str | None
 
 
 def init_db(path: str | Path) -> None:
@@ -122,8 +133,11 @@ def list_github_sync_candidates(
     path: str | Path,
     decisions: list[str],
     year: int | None = None,
+    start_year: int | None = None,
+    end_year: int | None = None,
     recent_days: int | None = None,
     limit: int = 25,
+    latest_first: bool = False,
 ) -> list[Talk]:
     """Return eligible talks that do not already have a GitHub issue."""
     init_db(path)
@@ -136,14 +150,23 @@ def list_github_sync_candidates(
     if year is not None:
         clauses.append("year = ?")
         params.append(year)
+    if start_year is not None:
+        clauses.append("year >= ?")
+        params.append(start_year)
+    if end_year is not None:
+        clauses.append("year <= ?")
+        params.append(end_year)
     if recent_days is not None:
         clauses.append("published_date >= date('now', ?)")
         params.append(f"-{recent_days} days")
 
+    # Scheduled historical backfills should walk from newest dated talks toward
+    # older material. Manual yearly sync keeps the older score-first ordering.
+    order_by = "year DESC, published_date DESC, score DESC, title" if latest_first else "score DESC, year DESC, title"
     sql = f"""
         SELECT * FROM talks
         WHERE {' AND '.join(clauses)}
-        ORDER BY score DESC, year DESC, title
+        ORDER BY {order_by}
         LIMIT ?
     """
     params.append(limit)
@@ -153,6 +176,59 @@ def list_github_sync_candidates(
         rows = conn.execute(sql, params).fetchall()
 
     return [_from_row(row) for row in rows]
+
+
+def list_github_project_repair_candidates(
+    path: str | Path,
+    decisions: list[str],
+    start_year: int | None = None,
+    end_year: int | None = None,
+    limit: int = 25,
+    latest_first: bool = False,
+) -> list[GitHubProjectRepairCandidate]:
+    """Return created issues that still need a GitHub Project item id."""
+    init_db(path)
+    clauses = [
+        "github_issue_number IS NOT NULL",
+        "github_issue_url IS NOT NULL",
+        "github_project_item_id IS NULL",
+    ]
+    params: list[Any] = []
+
+    if decisions:
+        clauses.append(f"decision IN ({','.join('?' for _ in decisions)})")
+        params.extend(decisions)
+    if start_year is not None:
+        clauses.append("year >= ?")
+        params.append(start_year)
+    if end_year is not None:
+        clauses.append("year <= ?")
+        params.append(end_year)
+
+    # Repair rows in the same direction as the scheduled creator so interrupted
+    # runs resume the most recent unfinished work first.
+    order_by = "year DESC, published_date DESC, score DESC, title" if latest_first else "score DESC, year DESC, title"
+    sql = f"""
+        SELECT * FROM talks
+        WHERE {' AND '.join(clauses)}
+        ORDER BY {order_by}
+        LIMIT ?
+    """
+    params.append(limit)
+
+    with sqlite3.connect(path) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql, params).fetchall()
+
+    return [
+        GitHubProjectRepairCandidate(
+            talk=_from_row(row),
+            issue_number=int(row["github_issue_number"]),
+            issue_url=str(row["github_issue_url"]),
+            issue_node_id=row["github_issue_node_id"],
+        )
+        for row in rows
+    ]
 
 
 def mark_reported(path: str | Path, urls: list[str], issue_number: int, issue_url: str) -> None:

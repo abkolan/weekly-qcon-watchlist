@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from infoq_watchlist import cli
+from infoq_watchlist import cli, storage
 from infoq_watchlist.github_sync import (
     CreatedIssue,
     GitHubSyncSettings,
@@ -269,3 +269,53 @@ def test_cli_github_sync_rate_limit_stops_cleanly(tmp_path, monkeypatch):
     with sqlite3.connect(db_path) as conn:
         synced = conn.execute("SELECT count(*) FROM talks WHERE github_issue_number IS NOT NULL").fetchone()[0]
     assert synced == 1
+
+
+def test_cli_github_backfill_repairs_project_items_before_creating_issues(tmp_path, monkeypatch):
+    db_path = tmp_path / "infoq.db"
+    repair_url = "https://www.infoq.com/presentations/repair/"
+    create_url = "https://www.infoq.com/presentations/create/"
+    upsert_talk(db_path, Talk(url=repair_url, title="Repair Me", year=2025, decision="watch", score=20))
+    upsert_talk(db_path, Talk(url=create_url, title="Create Me", year=2025, decision="watch", score=10))
+    calls = []
+
+    def fake_add_to_project(settings, issue, talk):
+        calls.append(("project", issue.number, talk.title))
+        return ProjectItem(f"PVTI_{issue.number}")
+
+    def fake_create_issue(settings, payload):
+        calls.append(("create", payload.title))
+        return CreatedIssue(36, "https://github.com/x/y/issues/36", "I_36")
+
+    storage.record_github_issue(db_path, repair_url, 35, "https://github.com/x/y/issues/35", "I_35")
+    monkeypatch.setattr(cli, "add_issue_to_project", fake_add_to_project)
+    monkeypatch.setattr(cli, "create_issue", fake_create_issue)
+    monkeypatch.setattr(cli, "sleep_between_writes", lambda seconds: None)
+
+    exit_code = cli.main(
+        [
+            "--db",
+            str(db_path),
+            "github-backfill",
+            "--start-year",
+            "2025",
+            "--end-year",
+            "2025",
+            "--limit",
+            "2",
+            "--create-issues",
+            "--add-to-project",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        ("project", 35, "Repair Me"),
+        ("create", "[2025][QCon] Create Me"),
+        ("project", 36, "Create Me"),
+    ]
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT title, github_issue_number, github_project_item_id FROM talks ORDER BY title"
+        ).fetchall()
+    assert rows == [("Create Me", 36, "PVTI_36"), ("Repair Me", 35, "PVTI_35")]

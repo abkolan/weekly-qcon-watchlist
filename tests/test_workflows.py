@@ -34,3 +34,20 @@ def test_weekly_workflow_schedules_sync_and_uploads_report():
     assert "db-maintenance --vacuum-threshold-mb 5 --fail-threshold-mb 25" in workflow
     assert "actions/upload-artifact" in workflow
     assert "git add data/infoq.db" in workflow
+
+
+def test_scheduled_backfill_runs_every_90_minutes_and_checkpoints_db():
+    workflow = Path(".github/workflows/scheduled-backfill.yml").read_text(encoding="utf-8")
+
+    # The alternating cron entries produce a 90-minute schedule in UTC.
+    assert 'cron: "0 0-21/3 * * *"' in workflow
+    assert 'cron: "30 1-22/3 * * *"' in workflow
+    assert "concurrency:" in workflow
+    assert "github-backfill" in workflow
+    assert '--end-year "$END_YEAR"' in workflow
+    assert "--create-issues" in workflow
+    assert "--add-to-project" in workflow
+    assert "status=$?" in workflow
+    assert 'steps.backfill.outputs.status == \'2\'' in workflow
+    assert "git add data/infoq.db" in workflow
+    assert "git push" in workflow

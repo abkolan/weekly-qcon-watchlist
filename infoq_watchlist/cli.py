@@ -10,6 +10,7 @@ from pathlib import Path
 from infoq_watchlist.config import load_config
 from infoq_watchlist.crawler import discover_listing_urls, fetch_url, read_fixture
 from infoq_watchlist.github_sync import (
+    CreatedIssue,
     add_issue_to_project,
     build_issue_payload,
     create_issue,
@@ -22,6 +23,7 @@ from infoq_watchlist.report import render_issue_batch, render_weekly, render_wat
 from infoq_watchlist.scoring import score_talk
 from infoq_watchlist.storage import (
     list_github_sync_candidates,
+    list_github_project_repair_candidates,
     list_talks,
     list_unreported_talks,
     record_github_issue,
@@ -95,6 +97,16 @@ def _build_parser() -> argparse.ArgumentParser:
     github_sync.add_argument("--create-issues", action="store_true")
     github_sync.add_argument("--add-to-project", action="store_true")
     github_sync.set_defaults(func=_cmd_github_sync)
+
+    github_backfill = subparsers.add_parser("github-backfill")
+    github_backfill.add_argument("--start-year", type=int, default=2016)
+    github_backfill.add_argument("--end-year", type=int, default=2025)
+    github_backfill.add_argument("--limit", type=int)
+    github_backfill.add_argument("--sleep-seconds", type=float)
+    github_backfill.add_argument("--dry-run", action="store_true")
+    github_backfill.add_argument("--create-issues", action="store_true")
+    github_backfill.add_argument("--add-to-project", action="store_true")
+    github_backfill.set_defaults(func=_cmd_github_backfill)
 
     export = subparsers.add_parser("export-csv")
     export.add_argument("--output", default="data/talks.csv")
@@ -259,6 +271,94 @@ def _cmd_github_sync(args: argparse.Namespace) -> int:
             return 1
 
     print(f"github-sync created {synced} issue(s)")
+    return 0
+
+
+def _cmd_github_backfill(args: argparse.Namespace) -> int:
+    """Backfill one latest-first historical GitHub batch from SQLite."""
+    config = load_config(args.config)
+    settings = settings_from_config(config.github)
+    limit = args.limit or settings.batch_limit
+    sleep_seconds = settings.sleep_seconds if args.sleep_seconds is None else args.sleep_seconds
+    decisions = list(settings.eligible_decisions)
+
+    repair_candidates = []
+    if args.add_to_project:
+        # Interrupted runs can leave an issue created but not added to the
+        # Project. Repair those rows before creating more external state.
+        repair_candidates = list_github_project_repair_candidates(
+            args.db,
+            decisions=decisions,
+            start_year=args.start_year,
+            end_year=args.end_year,
+            limit=limit,
+            latest_first=True,
+        )
+
+    remaining_limit = max(limit - len(repair_candidates), 0)
+    talks = []
+    if remaining_limit:
+        talks = list_github_sync_candidates(
+            args.db,
+            decisions=decisions,
+            start_year=args.start_year,
+            end_year=args.end_year,
+            limit=remaining_limit,
+            latest_first=True,
+        )
+
+    payloads = [{"url": talk.url, **asdict(build_issue_payload(talk))} for talk in talks]
+    repairs = [
+        {
+            "url": candidate.talk.url,
+            "title": candidate.talk.title,
+            "issue_number": candidate.issue_number,
+            "issue_url": candidate.issue_url,
+        }
+        for candidate in repair_candidates
+    ]
+    if args.dry_run or not args.create_issues:
+        print(
+            json.dumps(
+                {
+                    "mode": "dry-run",
+                    "start_year": args.start_year,
+                    "end_year": args.end_year,
+                    "count": len(repairs) + len(payloads),
+                    "repairs": repairs,
+                    "issues": payloads,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    repaired = 0
+    synced = 0
+    try:
+        for candidate in repair_candidates:
+            issue = CreatedIssue(candidate.issue_number, candidate.issue_url, candidate.issue_node_id)
+            project_item = add_issue_to_project(settings, issue, candidate.talk)
+            record_github_project_item(args.db, candidate.talk.url, project_item.item_id)
+            repaired += 1
+            sleep_between_writes(sleep_seconds)
+
+        for talk in talks:
+            payload = build_issue_payload(talk)
+            issue = create_issue(settings, payload)
+            record_github_issue(args.db, talk.url, issue.number, issue.url, issue.node_id)
+            synced += 1
+            if args.add_to_project:
+                project_item = add_issue_to_project(settings, issue, talk)
+                record_github_project_item(args.db, talk.url, project_item.item_id)
+            sleep_between_writes(sleep_seconds)
+    except RuntimeError as exc:
+        print(f"github-backfill stopped after {repaired} repair(s), {synced} issue(s): {exc}")
+        if "rate limit" in str(exc).casefold() or "secondary rate" in str(exc).casefold():
+            return 2
+        return 1
+
+    print(f"github-backfill repaired {repaired} project item(s), created {synced} issue(s)")
     return 0
 
 
