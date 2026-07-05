@@ -9,3 +9,5 @@ data/*.db
 data/*.csv
 data/*.md
 !data/.gitkeep
+
+.claude/settings.local.json

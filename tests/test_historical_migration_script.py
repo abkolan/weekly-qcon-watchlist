@@ -9,24 +9,26 @@ from infoq_watchlist.storage import list_talks
 def test_iter_historical_sources_walks_newest_year_first():
     sources = list(historical.iter_historical_sources(2024, 2025))
 
-    # Backfill discovery should start from the newest year and late-year event.
-    assert [source.url for source in sources[:4]] == [
+    # Backfill discovery should start from the newest year and late-year event,
+    # yielding both the modern and legacy slug for SF and New York.
+    assert [source.url for source in sources[:5]] == [
+        "https://www.infoq.com/qcon-san-francisco-2025/",
         "https://www.infoq.com/conferences/qconsf2025/",
+        "https://www.infoq.com/qcon-new-york-2025/",
         "https://www.infoq.com/qcon-newyork-2025/",
         "https://www.infoq.com/qcon-london-2025/",
-        "https://www.infoq.com/conferences/qconsf2024/",
     ]
 
 
 def test_pending_sources_skip_attempted_urls_and_can_retry_failures(tmp_path):
     db_path = tmp_path / "infoq.db"
     success = historical.MigrationResult(
-        source=historical.HistoricalSource(2025, "qcon-sf", "https://www.infoq.com/conferences/qconsf2025/"),
+        source=historical.HistoricalSource(2025, "qcon-sf", "https://www.infoq.com/qcon-san-francisco-2025/"),
         status="success",
         row_count=2,
     )
     failed = historical.MigrationResult(
-        source=historical.HistoricalSource(2025, "qcon-newyork", "https://www.infoq.com/qcon-newyork-2025/"),
+        source=historical.HistoricalSource(2025, "qcon-london", "https://www.infoq.com/qcon-london-2025/"),
         status="failed",
         row_count=0,
         error="not found",
@@ -34,18 +36,27 @@ def test_pending_sources_skip_attempted_urls_and_can_retry_failures(tmp_path):
     historical.record_source_state(db_path, success)
     historical.record_source_state(db_path, failed)
 
-    default_pending = historical.list_pending_sources(db_path, start_year=2025, end_year=2025, limit=3)
+    default_pending = historical.list_pending_sources(db_path, start_year=2025, end_year=2025, limit=10)
     retry_pending = historical.list_pending_sources(
         db_path,
         start_year=2025,
         end_year=2025,
-        limit=3,
+        limit=10,
         retry_failed=True,
     )
 
     # Normal automation skips all attempted sources; repair runs may retry failed sources.
-    assert [source.source_name for source in default_pending] == ["qcon-london"]
-    assert [source.source_name for source in retry_pending] == ["qcon-newyork", "qcon-london"]
+    assert [source.source_name for source in default_pending] == [
+        "qcon-sf-legacy",
+        "qcon-newyork",
+        "qcon-newyork-legacy",
+    ]
+    assert [source.source_name for source in retry_pending] == [
+        "qcon-sf-legacy",
+        "qcon-newyork",
+        "qcon-newyork-legacy",
+        "qcon-london",
+    ]
 
 
 def test_migrate_source_uses_schedule_links_and_records_rows(tmp_path, monkeypatch):
@@ -82,6 +93,8 @@ def test_migrate_source_uses_schedule_links_and_records_rows(tmp_path, monkeypat
     assert result.status == "success"
     assert result.row_count == 2
     assert [talk.title for talk in talks] == ["Distributed Runtime", "Platform Scaling"]
+    # Every crawled row is tagged with the conference edition it came from.
+    assert all(talk.conference_year == 2025 for talk in talks)
     assert state == ("success", 2)
 
 
@@ -107,4 +120,4 @@ def test_script_dry_run_prints_next_source(tmp_path, capsys):
     # Dry-runs must be safe previews for manual workflow dispatches.
     assert exit_code == 0
     assert output["mode"] == "dry-run"
-    assert output["sources"][0]["url"] == "https://www.infoq.com/conferences/qconsf2025/"
+    assert output["sources"][0]["url"] == "https://www.infoq.com/qcon-san-francisco-2025/"
