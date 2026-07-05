@@ -32,8 +32,9 @@ permissions:
   contents: write
   issues: write
 
+# Shared with weekly-watchlist.yml so the two never push to main concurrently.
 concurrency:
-  group: scheduled-qcon-backfill-main
+  group: qcon-watchlist-main-writes
   cancel-in-progress: false
 
 jobs:
