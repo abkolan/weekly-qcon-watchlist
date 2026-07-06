@@ -82,26 +82,17 @@ The first real sync created:
 
 ## Screenshots
 
-Screenshots should be added after the backlog has enough real data to show the intended workflow clearly.
+### Sample synced issue
 
-Planned README screenshots:
+Each eligible talk becomes a GitHub issue whose title, body, and labels are generated from the SQLite row. The body carries the score, decision, matched-signal reasoning, and tags produced by the CLI.
 
-- Sample generated GitHub issue for one synced talk.
-- GitHub Project board showing the backlog and CLI-managed fields.
-
-Recommended file locations:
-
-```text
-docs/screenshots/sample-issue.png
-docs/screenshots/project-board.png
-```
-
-When those screenshots exist, attach them here with normal Markdown image links:
-
-```markdown
 ![Sample generated issue](docs/screenshots/sample-issue.png)
-![QCon Watch Backlog project board](docs/screenshots/project-board.png)
-```
+
+### QCon Watch Backlog project
+
+Every synced issue is added to the `QCon Watch Backlog` GitHub Project, where the CLI populates the `Status`, `Year`, `Decision`, `Presentation URL`, and related fields.
+
+![QCon Watch Backlog project](docs/screenshots/project-board.png)
 
 ## Dashboard
 
@@ -487,7 +478,6 @@ infoq_watchlist/
 
 tests/            pytest suite and HTML fixtures
 watchlist.toml    editable scoring, source, and GitHub config
-SPEC.md           original product spec and design constraints
 data/infoq.db     tracked SQLite state
 ```
 
