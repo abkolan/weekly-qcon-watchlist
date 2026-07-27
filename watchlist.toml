@@ -25,11 +25,14 @@ like_step = 10
 view_step = 1000
 max_bonus = 4
 
+# Newest-first InfoQ feeds so the weekly crawl surfaces recently published talks.
+# Per-edition QCon archive pages (e.g. qconsf2016) are frozen to one year and were
+# the reason the weekly job never found new talks; the every-90-min historical
+# backfill walks those dated archives via scripts/migrate_historical_qcon.py.
 [sources]
 qcon_seed_urls = [
-  "https://www.infoq.com/qcon-london-2016/",
-  "https://www.infoq.com/qcon-newyork-2016/",
-  "https://www.infoq.com/conferences/qconsf2016/",
+  "https://www.infoq.com/presentations/",
+  "https://www.infoq.com/conferences/qconsf",
 ]
 
 [github]
