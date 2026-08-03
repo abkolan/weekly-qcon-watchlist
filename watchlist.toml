@@ -32,7 +32,7 @@ max_bonus = 4
 [sources]
 qcon_seed_urls = [
   "https://www.infoq.com/presentations/",
-  "https://www.infoq.com/conferences/qconsf",
+  "https://www.infoq.com/conferences/",
 ]
 
 [github]
