@@ -7,6 +7,8 @@ import sqlite3
 from dataclasses import asdict
 from pathlib import Path
 
+import requests
+
 from infoq_watchlist.config import load_config
 from infoq_watchlist.crawler import discover_listing_urls, fetch_url, read_fixture
 from infoq_watchlist.github_sync import (
@@ -397,18 +399,30 @@ def _inside_year_range(year: int | None, start_year: int | None, end_year: int |
 
 
 def _fetch_listing_pages(seed_urls: list[str], max_pages: int) -> list[str]:
-    """Fetch seed pages and statically discovered pagination URLs."""
+    """Fetch seed pages and statically discovered pagination URLs.
+
+    A single dead seed (InfoQ retires/redirects listing pages over time) is
+    skipped with a warning instead of failing the whole crawl.
+    """
     pages: list[tuple[str, str]] = []
     fetched_urls: set[str] = set()
     for seed_url in seed_urls:
-        seed_html = fetch_url(seed_url)
+        try:
+            seed_html = fetch_url(seed_url)
+        except requests.HTTPError as exc:
+            print(f"warning: skipping seed {seed_url}: {exc}")
+            continue
         pages.append((seed_html, seed_url))
         fetched_urls.add(seed_url.rstrip("/"))
         for page_url in discover_listing_urls(seed_url, seed_html, max_pages):
             key = page_url.rstrip("/")
             if key in fetched_urls:
                 continue
-            pages.append((fetch_url(page_url), page_url))
+            try:
+                pages.append((fetch_url(page_url), page_url))
+            except requests.HTTPError as exc:
+                print(f"warning: skipping page {page_url}: {exc}")
+                continue
             fetched_urls.add(key)
     return pages
 
