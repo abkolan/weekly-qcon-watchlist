@@ -57,5 +57,7 @@ def test_scheduled_backfill_runs_every_90_minutes_and_checkpoints_db():
     assert 'steps.backfill.outputs.status == \'2\'' in workflow
     assert "GitHub rate limit reached after checkpointing database state" in workflow
     assert "run: exit 2" not in workflow
+    # Checkout and git push must keep working if the separate Project PAT expires.
+    assert "token: ${{ secrets.QCON_WATCHLIST_TOKEN || github.token }}" not in workflow
     assert "git add data/infoq.db" in workflow
     assert "git push" in workflow

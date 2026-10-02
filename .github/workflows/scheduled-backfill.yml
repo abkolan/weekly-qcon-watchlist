@@ -43,9 +43,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.QCON_WATCHLIST_TOKEN || github.token }}
     steps:
+      # Keep repository authentication independent from the PAT used for Project writes.
       - uses: actions/checkout@v7.0.0
-        with:
-          token: ${{ secrets.QCON_WATCHLIST_TOKEN || github.token }}
 
       - uses: astral-sh/setup-uv@v8.2.0
 
